@@ -218,3 +218,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- erp-agent ---
+# Recordings, screenshots, run outputs: may show personal desktop content; never commit (public repo)
+data/
+# Keys and credentials
+*.pem
+*.key
+# Claude Code local settings
+.claude/settings.local.json
+CLAUDE.md
+experiments
