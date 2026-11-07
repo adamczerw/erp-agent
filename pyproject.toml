@@ -9,6 +9,9 @@ dependencies = [
     "openadapt-evals",
     "openadapt-grounding>=0.1.2",
     "pillow",
+    "numpy",
+    "websockets>=13",
+    "cryptography>=43",
 ]
 
 [project.optional-dependencies]
@@ -27,3 +30,6 @@ openadapt-grounding = { path = "../openadapt-all/openadapt-grounding", editable 
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.openadapt]
+telemetry = false

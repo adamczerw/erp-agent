@@ -1,0 +1,6 @@
+{
+  "task_id": "terminal-hello",
+  "instruction": "Open a terminal and print hello world",
+  "domain": "desktop",
+  "time_limit_steps": 10
+}

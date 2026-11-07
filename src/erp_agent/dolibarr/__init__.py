@@ -1,1 +1,1 @@
-"""Dolibarr backend (reset, SQL queries) and DolibarrAdapter (a BenchmarkAdapter)."""
+"""Dolibarr backend: reset and SQL queries."""

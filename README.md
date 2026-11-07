@@ -16,7 +16,8 @@ plugs into its `BenchmarkAgent` and `BenchmarkAdapter` interfaces; the forks don
 src/erp_agent/
   agent/       planner, OmniParserGrounder, ErpAgent orchestrator
   desktop/     VncDesktop: screenshots and input over VNC (RFB)
-  dolibarr/    Dolibarr backend (reset, SQL checks) and DolibarrAdapter
+  adapter/     DolibarrAdapter (a BenchmarkAdapter)
+  dolibarr/    Dolibarr backend (reset, SQL checks)
 tasks/         task definitions (instruction, start URL, success check)
 docs/          plan and notes
 tests/
