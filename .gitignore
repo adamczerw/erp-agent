@@ -231,3 +231,6 @@ CLAUDE.md
 experiments
 .vscode/
 /docs/
+# Dolibarr bench: snapshot outputs; baseline dump not reviewed for publishing yet
+environment/bench/results/
+environment/bench/baseline/

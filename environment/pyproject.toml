@@ -1,0 +1,13 @@
+[project]
+name = "erp-agent-environment"
+version = "0.1.0"
+description = "Tooling to run the OpenSandbox desktop for erp-agent"
+requires-python = ">=3.12"
+dependencies = [
+    "opensandbox==0.1.6",
+    "opensandbox-server==0.1.9",
+    "python-dotenv",
+]
+
+[tool.uv]
+package = false
