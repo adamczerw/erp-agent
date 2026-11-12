@@ -16,9 +16,10 @@ from openadapt_evals.adapters.base import (
     BenchmarkTask,
 )
 
+from erp_agent.desktop.browser import Browser, BrowserError
 from erp_agent.desktop.vnc_connection import RfbError
 from erp_agent.desktop.vnc_desktop import SCROLL_MAP, VncDesktop
-from erp_agent.dolibarr.dolibarr import Dolibarr
+from erp_agent.dolibarr.dolibarr import Dolibarr, DolibarrError
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +51,13 @@ class DolibarrAdapter(BenchmarkAdapter):
         self,
         desktop: VncDesktop,
         backend: Dolibarr | None = None,
+        browser: Browser | None = None,
         tasks_dir: str | Path = "tasks",
         wait_seconds: float = 3.0,
     ):
         self.vnc_desktop = desktop
         self.backend = backend
+        self.browser = browser
         self.tasks_dir = Path(tasks_dir)
         self._step_count = 0
         self._wait_seconds = wait_seconds
@@ -241,7 +244,7 @@ class DolibarrAdapter(BenchmarkAdapter):
         return {task.task_id: task for task in self.list_tasks()}[task_id]
 
     
-    def reset(self, task: BenchmarkTask) -> BenchmarkObservation:
+    def reset(self, task: BenchmarkTask | None = None) -> BenchmarkObservation:
         """Reset environment to task's initial state.
 
         Args:
@@ -251,45 +254,80 @@ class DolibarrAdapter(BenchmarkAdapter):
             Initial observation.
         """
         try:
+            if self.backend is not None:
+                self.backend.reset()
             self.vnc_desktop.reconnect()
-        except RfbError as e:
+            if self.browser is not None:
+                self.browser.restart(task.initial_state_ref if task else None)
+                self.vnc_desktop.wait_until_stable()
+                if self.backend is not None:
+                    self._login()
+        except (RfbError, DolibarrError, BrowserError) as e:
             raise InfrastructureError(str(e)) from e
         self._step_count = 0
         return self.observe()
+
+    def _login(self) -> None:
+        self.vnc_desktop.type(f"{self.backend.admin_login}\t{self.backend.admin_password}\n")
+        self.vnc_desktop.wait_until_stable(quiet=2.0)
 
 
 
 
 
 if __name__ == "__main__":
+
     load_dotenv()
     VNC_PASSWORD = os.environ["VNC_PASSWORD"]
-    VNC_ADDRESS = "127.0.0.1:57257/proxy/6080"
+    VNC_ADDRESS = "127.0.0.1:49287/proxy/6080"
+    BASELINE_DIR = os.environ["BASELINE_DIR"]
+    DOCS_DIR = os.environ["DOCS_DIR"]
+    DB_ROOT_USER = os.environ["DB_ROOT_USER"]
+    DB_ROOT_PASSWORD = os.environ["DB_ROOT_PASSWORD"]
+
     desktop = VncDesktop(VNC_ADDRESS, VNC_PASSWORD)
-    adapter = DolibarrAdapter(desktop)
+    dolibarr = Dolibarr(BASELINE_DIR, DOCS_DIR, DB_ROOT_USER, DB_ROOT_PASSWORD)
+    adapter = DolibarrAdapter(desktop, backend=dolibarr, browser=Browser())
+    adapter.reset()
+    desktop.close()
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     # ss = adapter.observe().screenshot
     # with open("screenshot.png", "wb") as f:
     #     f.write(ss)
-    demo = [
-        ("click: select the File System icon", BenchmarkAction("click", x=70, y=75), 6),
-        ("drag: rubber-band select both icons", BenchmarkAction("drag", x=20, y=40, end_x=130, end_y=240), 3),
-        ("click: clear the selection", BenchmarkAction("click", x=300, y=300), 3),
-        ("right_click: open the desktop menu", BenchmarkAction("right_click", x=300, y=300), 6),
-        ("key: Escape closes the menu", BenchmarkAction("key", key="Escape"), 3),
-        ("double_click: open Home in the file manager", BenchmarkAction("double_click", x=70, y=180), 4),
-        ("key with modifier: ctrl+w closes the file manager", BenchmarkAction("key", key="w", modifiers=["ctrl"]), 3),
-        ("click: open a terminal from the dock", BenchmarkAction("click", x=568, y=776), 4),
-        ("type: a command, no Enter yet", BenchmarkAction("type", text="seq 1 200"), 3),
-        ("key: Enter runs it", BenchmarkAction("key", key="Enter"), 3),
-        ("scroll: 5 clicks up at the screen center", BenchmarkAction("scroll", scroll_direction="up", scroll_amount=5), 3),
-        ("scroll: 5 clicks down at the screen center", BenchmarkAction("scroll", scroll_direction="down", scroll_amount=5), 3),
-        ("key with modifier: ctrl+l clears the terminal", BenchmarkAction("key", key="l", modifiers=["ctrl"]), 3),
-        ("type: \\n presses Enter, exit closes the terminal", BenchmarkAction("type", text="exit\n"), 3),
-        ("done: no-op", BenchmarkAction("done"), 0),
-    ]
-    for description, action, pause in demo:
-        print(description)
-        adapter._execute_action(action)
-        time.sleep(pause)
+    # demo = [
+    #     ("click: select the File System icon", BenchmarkAction("click", x=70, y=75), 6),
+    #     ("drag: rubber-band select both icons", BenchmarkAction("drag", x=20, y=40, end_x=130, end_y=240), 3),
+    #     ("click: clear the selection", BenchmarkAction("click", x=300, y=300), 3),
+    #     ("right_click: open the desktop menu", BenchmarkAction("right_click", x=300, y=300), 6),
+    #     ("key: Escape closes the menu", BenchmarkAction("key", key="Escape"), 3),
+    #     ("double_click: open Home in the file manager", BenchmarkAction("double_click", x=70, y=180), 4),
+    #     ("key with modifier: ctrl+w closes the file manager", BenchmarkAction("key", key="w", modifiers=["ctrl"]), 3),
+    #     ("click: open a terminal from the dock", BenchmarkAction("click", x=568, y=776), 4),
+    #     ("type: a command, no Enter yet", BenchmarkAction("type", text="seq 1 200"), 3),
+    #     ("key: Enter runs it", BenchmarkAction("key", key="Enter"), 3),
+    #     ("scroll: 5 clicks up at the screen center", BenchmarkAction("scroll", scroll_direction="up", scroll_amount=5), 3),
+    #     ("scroll: 5 clicks down at the screen center", BenchmarkAction("scroll", scroll_direction="down", scroll_amount=5), 3),
+    #     ("key with modifier: ctrl+l clears the terminal", BenchmarkAction("key", key="l", modifiers=["ctrl"]), 3),
+    #     ("type: \\n presses Enter, exit closes the terminal", BenchmarkAction("type", text="exit\n"), 3),
+    #     ("done: no-op", BenchmarkAction("done"), 0),
+    # ]
+    # for description, action, pause in demo:
+    #     print(description)
+    #     adapter._execute_action(action)
+    #     time.sleep(pause)
 
-    desktop.close()
+    # desktop.close()

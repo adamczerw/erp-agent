@@ -44,6 +44,7 @@ RUN apt-get update \
         fonts-dejavu-core \
         net-tools \
         ca-certificates \
+        tini \
         --no-install-recommends \
     && sed -i 's/DEFAULT_LOCALE = null;/DEFAULT_LOCALE = "en";/' /usr/share/novnc/app/localization.js \
     && rm -rf /var/lib/apt/lists/*

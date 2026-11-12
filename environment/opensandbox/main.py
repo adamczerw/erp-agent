@@ -56,6 +56,7 @@ async def main() -> None:
             image,
             connection_config=config,
             timeout=None,
+            entrypoint=["tini", "--", "tail", "-f", "/dev/null"],
             env={
                 "PYTHON_VERSION": python_version,
                 "VNC_PASSWORD": vnc_password,
