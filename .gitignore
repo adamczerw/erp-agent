@@ -234,3 +234,5 @@ experiments
 # Dolibarr bench: snapshot outputs; baseline dump not reviewed for publishing yet
 environment/bench/results/
 environment/bench/baseline/
+# Local start/stop script for the work environment
+/dev.sh

@@ -1,0 +1,34 @@
+{
+  "task_id": "create-thirdparty-name-only",
+  "instruction": "Create a new third party named \"Nvidia\". Fill in only the name and leave every other field at its default value.",
+  "domain": "web",
+  "initial_state_ref": "http://host.docker.internal/",
+  "time_limit_steps": 15,
+  "raw_config": {
+    "difficulty": "easy",
+    "module": "societe"
+  },
+  "evaluation_spec": {
+    "checks": [
+      {
+        "name": "nvidia_exists_once",
+        "sql": "SELECT COUNT(*) FROM llx_societe WHERE BINARY nom = 'Nvidia'",
+        "expected": "1"
+      },
+      {
+        "name": "no_extra_fields",
+        "sql": "SELECT COUNT(*) FROM llx_societe WHERE BINARY nom = 'Nvidia' AND COALESCE(name_alias,'') = '' AND COALESCE(address,'') = '' AND COALESCE(zip,'') = '' AND COALESCE(town,'') = '' AND COALESCE(phone,'') = '' AND COALESCE(phone_mobile,'') = '' AND COALESCE(fax,'') = '' AND COALESCE(email,'') = '' AND COALESCE(url,'') = '' AND COALESCE(siren,'') = '' AND COALESCE(siret,'') = '' AND COALESCE(tva_intra,'') = '' AND COALESCE(note_public,'') = '' AND COALESCE(note_private,'') = '' AND fournisseur = 0",
+        "expected": "1"
+      },
+      {
+        "name": "baseline_customer_intact",
+        "sql": "SELECT COUNT(*) FROM llx_societe WHERE rowid = 1 AND BINARY nom = 'Microsoft' AND status = 1",
+        "expected": "1"
+      }
+    ],
+    "expected_row_deltas": {
+      "llx_societe": 1,
+      "llx_societe_commerciaux": 1
+    }
+  }
+}

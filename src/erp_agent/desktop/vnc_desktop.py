@@ -90,12 +90,29 @@ class VncDesktop:
         return png_bytes
 
     def wait_until_stable(
-        self, first_change: float = 1.5, quiet: float = 0.5, cap: float = 8.0, min_area: int = 400
+        self,
+        first_change: float = 1.5,
+        quiet: float = 0.5,
+        cap: float = 8.0,
+        min_area: int = 400,
+        min_wait: float = 1.5,
     ) -> None:
+        """Wait until the screen stops changing after an action.
+
+        Waits up to ``first_change`` seconds for a change, then until no change for
+        ``quiet`` seconds, but never less than ``min_wait`` and never more than ``cap``
+        seconds in total. Updates smaller than ``min_area`` px² (cursor, caret) are ignored.
+
+        ``min_wait`` covers the server round trip: typed text or a hover highlight change
+        the screen at once, but Dolibarr's new page arrives ~0.8–1.2 s later (measured
+        14.11). Without it the quiet period ends between the two and the screenshot
+        shows the old page. Slower pages are left to the agent's ``wait`` action.
+        """
         start = time.monotonic()
         last_change = None
         while True:
             limit = start + first_change if last_change is None else last_change + quiet
+            limit = max(limit, start + min_wait)
             remaining = min(limit, start + cap) - time.monotonic()
             if remaining <= 0:
                 if time.monotonic() >= start + cap:

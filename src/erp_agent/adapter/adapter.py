@@ -45,6 +45,10 @@ class InvalidActionError(Exception):
     error_type = "agent"
 
 
+class EvaluationError(Exception):
+    error_type = "evaluation"
+
+
 class DolibarrAdapter(BenchmarkAdapter):
 
     def __init__(
@@ -206,15 +210,74 @@ class DolibarrAdapter(BenchmarkAdapter):
 
 
     def evaluate(self, task: BenchmarkTask) -> BenchmarkResult:
-        """Run benchmark's native evaluation on current state.
+        """Check the database against the task's ``evaluation_spec``.
+
+        The spec has two optional parts:
+
+        - ``checks``: a list of ``{"name", "sql", "expected"}``. The query must return
+          a single value, which is compared as a string with ``expected``.
+        - ``expected_row_deltas``: ``{table: delta}`` relative to the backend's last
+          ``reset()``. Every table not listed must stay unchanged.
+
+        ``score`` is the fraction of passed checks (the row deltas count as one check)
+        and ``success`` means all of them passed. Read-only, so the runner may call it
+        in the middle of a task (done-gate).
 
         Args:
             task: Task to evaluate.
 
         Returns:
-            BenchmarkResult with success/score.
+            BenchmarkResult with success/score. Without a backend or a spec it is
+            "not evaluated". A failing query gives ``error_type="evaluation"``.
         """
-        return BenchmarkResult(task_id=task.task_id, success=False, score=0.0, reason="not evaluated")
+        spec = task.evaluation_spec or {}
+        checks = spec.get("checks", [])
+        expected_deltas = spec.get("expected_row_deltas")
+        if self.backend is None or not (checks or expected_deltas is not None):
+            return BenchmarkResult(task_id=task.task_id, success=False, score=0.0, reason="not evaluated")
+
+        failures = []
+        try:
+            for check in checks:
+                got = self._query_value(check["sql"])
+                if got != str(check["expected"]):
+                    failures.append(f"{check['name']}: got {got!r}, expected {str(check['expected'])!r}")
+            if expected_deltas is not None:
+                wrong = self._unexpected_row_deltas(expected_deltas)
+                if wrong:
+                    details = ", ".join(f"{t} {got:+d} (expected {exp:+d})" for t, (got, exp) in sorted(wrong.items()))
+                    failures.append(f"row_deltas: {details}")
+        except (DolibarrError, EvaluationError) as e:
+            logger.error("Evaluation of %s failed: %s", task.task_id, e)
+            return BenchmarkResult(
+                task_id=task.task_id, success=False, score=0.0,
+                error=str(e), error_type="evaluation", reason="evaluation failed",
+            )
+
+        total = len(checks) + (expected_deltas is not None)
+        passed = total - len(failures)
+        reason = f"{passed}/{total} checks passed"
+        if failures:
+            reason += "; " + "; ".join(failures)
+        return BenchmarkResult(
+            task_id=task.task_id, success=not failures, score=passed / total, reason=reason
+        )
+
+    def _query_value(self, sql: str) -> str:
+        """Run a query that must return exactly one value."""
+        rows = self.backend.query(sql)
+        if len(rows) != 1 or len(rows[0]) != 1:
+            raise EvaluationError(f"query must return a single value, got {rows!r}: {sql}")
+        return rows[0][0]
+
+    def _unexpected_row_deltas(self, expected: dict[str, int]) -> dict[str, tuple[int, int]]:
+        """Return {table: (actual delta, expected delta)} for every table that differs."""
+        actual = self.backend.row_deltas()
+        return {
+            table: (actual.get(table, 0), expected.get(table, 0))
+            for table in actual.keys() | expected.keys()
+            if actual.get(table, 0) != expected.get(table, 0)
+        }
 
     def list_tasks(self, domain: str | None = None) -> list[BenchmarkTask]:
         """List available tasks, optionally filtered by domain.
@@ -279,7 +342,7 @@ if __name__ == "__main__":
 
     load_dotenv()
     VNC_PASSWORD = os.environ["VNC_PASSWORD"]
-    VNC_ADDRESS = "127.0.0.1:49287/proxy/6080"
+    VNC_ADDRESS = "127.0.0.1:49075/proxy/6080"
     BASELINE_DIR = os.environ["BASELINE_DIR"]
     DOCS_DIR = os.environ["DOCS_DIR"]
     DB_ROOT_USER = os.environ["DB_ROOT_USER"]
@@ -288,9 +351,43 @@ if __name__ == "__main__":
     desktop = VncDesktop(VNC_ADDRESS, VNC_PASSWORD)
     dolibarr = Dolibarr(BASELINE_DIR, DOCS_DIR, DB_ROOT_USER, DB_ROOT_PASSWORD)
     adapter = DolibarrAdapter(desktop, backend=dolibarr, browser=Browser())
-    adapter.reset()
+    x = dolibarr.query("select * from llx_societe")
+    print(x)
+    x = dolibarr.query("select * from llx_societe_commerciaux")
+    print("-------------------------------------")
+    print(x)
     desktop.close()
-    
+
+
+
+
+#     @dataclass
+# class BenchmarkTask:
+#     """Canonical task representation.
+
+#     Attributes:
+#         task_id: Unique identifier for the task.
+#         instruction: Natural language task instruction.
+#         domain: Task domain ("web", "desktop", "mobile").
+#         initial_state_ref: Reference to initial state (VM snapshot, URL, etc.).
+#         time_limit_steps: Maximum steps allowed for the task.
+#         raw_config: Original benchmark config (lossless preservation).
+#         evaluation_spec: Benchmark-native evaluation specification.
+#     """
+
+#     task_id: str
+#     instruction: str
+#     domain: str  # "web", "desktop", "mobile"
+
+#     # Environment setup
+#     initial_state_ref: str | None = None  # VM snapshot, storage_state, start URL
+#     time_limit_steps: int | None = None
+
+#     # Preserve original config losslessly
+#     raw_config: dict[str, Any] = field(default_factory=dict)
+
+#     # Evaluation spec (benchmark-native)
+#     evaluation_spec: dict[str, Any] | None = None
     
     
     

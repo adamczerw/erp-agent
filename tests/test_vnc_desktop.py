@@ -75,11 +75,30 @@ class UpdatesConn:
         return [(0, 0, area, 1)]
 
 
-def _settle(areas, **kwargs):
+class TimedConn:
+    """Delivers updates of the given areas at fixed times after creation."""
+
+    def __init__(self, events):
+        self.start = time.monotonic()
+        self.events = list(events)  # (seconds after start, area)
+
+    def wait_for_update(self, timeout):
+        if self.events:
+            at, area = self.events[0]
+            delay = self.start + at - time.monotonic()
+            if delay <= timeout:
+                time.sleep(max(delay, 0))
+                self.events.pop(0)
+                return [(0, 0, area, 1)]
+        time.sleep(timeout)
+        return None
+
+
+def _settle(areas, conn=None, **kwargs):
     desktop = VncDesktop.__new__(VncDesktop)
-    desktop.conn = UpdatesConn(areas)
+    desktop.conn = conn or UpdatesConn(areas)
     start = time.monotonic()
-    desktop.wait_until_stable(**{"first_change": 0.1, "quiet": 0.05, "cap": 0.5, **kwargs})
+    desktop.wait_until_stable(**{"first_change": 0.1, "quiet": 0.05, "cap": 0.5, "min_wait": 0, **kwargs})
     return time.monotonic() - start
 
 
@@ -97,3 +116,21 @@ def test_settle_ignores_tiny_changes():
 
 def test_settle_stops_at_cap():
     assert 0.5 <= _settle(itertools.repeat(1000)) < 0.6
+
+
+def test_settle_lasts_at_least_min_wait():
+    assert 0.3 <= _settle([], min_wait=0.3) < 0.4
+
+
+def test_settle_min_wait_catches_the_late_page_after_the_echo():
+    # Typed text at once, the new page after the quiet period would have ended.
+    conn = TimedConn([(0.01, 1000), (0.2, 100_000), (0.22, 50_000)])
+    elapsed = _settle(None, conn=conn, min_wait=0.3)
+    assert conn.events == []
+    assert 0.3 <= elapsed < 0.4
+
+
+def test_settle_without_min_wait_misses_the_late_page():
+    conn = TimedConn([(0.01, 1000), (0.2, 100_000)])
+    assert _settle(None, conn=conn) < 0.15
+    assert len(conn.events) == 1
